@@ -35,12 +35,14 @@ apkSigned="./apk/apkSigned.apk"
 apkAligned="./apk/apkAligned.apk"
 
 #apktool路径
-apktool="./tool/apktool/apktool"
+apktool="./tool/apktool/apktool.jar"
 jar2dex="./tool/dex2jar-2.0/d2j-jar2dex.sh"
 baksmali="./tool/baksmali-2.1.2.jar"
 zipalign="./tool/zipalign"
 aapt="./tool/aapt"
 adb="./tool/adb"
+# jarsigner = "./tool/jarsigner"
+apksigner="./tool/apksigner.jar"
 
 # ------------------------密钥---------------------------
 
@@ -72,9 +74,9 @@ function unpackAPK()
 	rm -rf "${unpackAPK}/*"
 
 	# 反编译apk母包
-	"$apktool" d -f "$originAPK" -o "$unpackAPK"
+	java -jar "$apktool" d -f "$originAPK" -o "$unpackAPK"
 
-	open $unpackAPK
+	# explorer $unpackAPK
 
 	return 0
 }
@@ -84,7 +86,7 @@ function readApkInfo()
 	echo "\nEnter APK Path"
 	read originAPK
 
-	$aapt dump badging $originAPK
+	"$aapt" dump badging "$originAPK"
 
 	return 0
 }
@@ -101,20 +103,21 @@ function installAPKOnSimulator()
 
 function packAPK()
 {
-	# 重新打包APK
-	"$apktool" b -f "$unpackAPK" -o "$apkUnsigned"
-
-	# 重新签名
-	jarsigner -verbose -digestalg SHA1 -sigalg MD5withRSA -keystore "$keystore" -storepass "$storePass" -keypass "$keyPass" -signedjar "$apkSigned" "$apkUnsigned" "$keyAlias" 
+	# # 重新打包APK
+	java -jar "$apktool" b -o "$apkUnsigned" "$unpackAPK"
 
 	# zipalign优化APK包
-	"$zipalign" -f -v 4 "$apkSigned" "$apkAligned"
+	"$zipalign" -f -v 4 "$apkUnsigned" "$apkAligned"
+
+	# 重新签名
+	# "$jarsigner" -verbose -digestalg SHA1 -sigalg MD5withRSA -keystore "$keystore" -storepass "$storePass" -keypass "$keyPass" -signedjar "$apkSigned" "$apkUnsigned" "$keyAlias" 
+	java -jar "$apksigner" sign -verbose -ks "$keystore" -ks-key-alias "$keyAlias" -ks-pass pass:"$storePass" -key-pass pass:"$keyPass" -out "$apkSigned" "$apkAligned"
 
 	rm -rf "${apkUnsigned}"
-	rm -rf "${apkSigned}"
+	rm -rf "${apkAligned}"
 
 	# 移动，重命名
-	mv -vf "$apkAligned" "$out"
+	mv -vf "$apkSigned" "$out"
 }
 
 function repackAPK()
@@ -179,22 +182,8 @@ function repackAPK()
 		cp -prv "$sdkAndroidManifest" "$unpackAPK/AndroidManifest.xml"
 	fi
 
-	# 重新打包APK
-	"$apktool" b -f "$unpackAPK" -o "$apkUnsigned"
-
-	# 重新签名
-	jarsigner -verbose -digestalg SHA1 -sigalg MD5withRSA -keystore "$keystore" -storepass "$storePass" -keypass "$keyPass" -signedjar "$apkSigned" "$apkUnsigned" "$keyAlias" 
-
-	# zipalign优化APK包
-	"$zipalign" -f -v 4 "$apkSigned" "$apkAligned"
-
-	rm -rf "${apkUnsigned}"
-	rm -rf "${apkSigned}"
-
-	# 移动，重命名
-	mv -vf "$apkAligned" "$out"
+	packAPK
 }
-
 
 
 echo "1.unpackAPK	2.readApkInfo	3.installAPKOnSimulator		4.repackAPK		5.packAPK"
@@ -213,6 +202,8 @@ elif [[ option -eq 5 ]]; then
 	packAPK
 fi
 
-
+echo 按任意键继续
+read -n 1
+echo 继续运行
 
 exit
